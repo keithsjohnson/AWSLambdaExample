@@ -18,6 +18,8 @@ import com.amazonaws.services.s3.model.S3Object;
 
 public class PostcodeLocationStoreFileLamda {
 
+	private static final String CR_LN_REQEX = "\\r?\\n";
+
 	public String handlePostcodeLocationStoreFile(S3Event s3event, Context context) throws IOException {
 
 		context.getLogger().log("-----------------------------------");
@@ -90,7 +92,7 @@ public class PostcodeLocationStoreFileLamda {
 		String dataString = remainingLine + new String(dataChar);
 		// context.getLogger().log("dataString: '" + dataString + "'");
 
-		String[] lines = dataString.split("\\r?\\n");
+		String[] lines = dataString.split(CR_LN_REQEX);
 		context.getLogger().log("lines.length: " + lines.length);
 
 		String lastLine = lines[lines.length - 1];
