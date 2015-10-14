@@ -6,7 +6,10 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.Arrays;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.amazonaws.auth.EnvironmentVariableCredentialsProvider;
 import com.amazonaws.regions.Region;
@@ -26,6 +29,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class PostcodeLocationStoreFilePartLambda {
+
+	private static final String SEPARATOR = ",";
 
 	private static final String FILENAME = "E:/dev/git/uk.co.keithj.lambda.example/uk.co.keithj.lambda.example/src/test/resources/SMpostcodes.csv";
 	private static final String CR_LN_REQEX = "\\r?\\n";
@@ -73,34 +78,46 @@ public class PostcodeLocationStoreFilePartLambda {
 
 		String startPositionString = storeFilePartRequest.getStartPosition();
 		int startPosition = Integer.parseInt(startPositionString);
-		context.getLogger().log("-------------------------------------------------------------------------------");
-		context.getLogger().log("bucket=" + bucket + ", key=" + key + ", regionName=" + regionName + ", chunkSize="
-				+ chunkSize + ", startPosition=" + startPosition);
 
-		ObjectData objectData = getObjectData(regionName, bucket, key, startPosition, chunkSize, context);
+		String partIndexString = storeFilePartRequest.getPartIndex();
+		int partIndex = Integer.parseInt(partIndexString);
+
+		context.getLogger().log(
+				partIndexString + " -------------------------------------------------------------------------------");
+		context.getLogger().log(partIndexString + " bucket=" + bucket + ", key=" + key + ", regionName=" + regionName
+				+ ", chunkSize=" + chunkSize + ", startPosition=" + startPosition);
+
+		ObjectData objectData = getObjectData(regionName, bucket, key, startPosition, chunkSize, context,
+				partIndexString);
 
 		if (objectData.isCreateSNSMessageToProcessRemainingData()) {
 			StoreFilePartRequest nextStoreFilePartRequest = new StoreFilePartRequest(bucket, key, chunkSizeString,
-					regionName, Integer.toString(startPosition + objectData.getContentLength()));
-			context.getLogger().log("nextStoreFilePartRequest=" + nextStoreFilePartRequest.toString());
-			createSNSMessage(nextStoreFilePartRequest, context);
+					regionName, Integer.toString(startPosition + objectData.getContentLength()),
+					Integer.toString(partIndex + 1));
+			context.getLogger()
+					.log(partIndexString + " nextStoreFilePartRequest=" + nextStoreFilePartRequest.toString());
+			createSNSMessage(nextStoreFilePartRequest, context, partIndexString);
 		}
+
+		// Store PostcodeLocation Data in DynamoDB
+		storeDataInDynamoDB(objectData);
 
 		String finished = objectData.isCreateSNSMessageToProcessRemainingData() ? "false" : "true";
 		StoreFilePartResponse storeFilePartResponse = new StoreFilePartResponse(objectData.toString(),
-				Integer.toString(startPosition + objectData.getContentLength()), finished);
-		context.getLogger().log(storeFilePartResponse.toString());
-		context.getLogger().log("-------------------------------------------------------------------------------");
+				Integer.toString(startPosition + objectData.getContentLength()), finished, partIndexString);
+		context.getLogger().log(partIndexString + " " + storeFilePartResponse.toString());
+		context.getLogger().log(
+				partIndexString + " -------------------------------------------------------------------------------");
 		return storeFilePartResponse;
 	}
 
 	public ObjectData getObjectData(String regionName, String bucket, String key, int startPosition, int chunkSize,
-			Context context) {
+			Context context, String partIndexString) {
 
 		FileObjectData s3OjectData2 = getS3ObjectData(regionName, bucket, key, startPosition, chunkSize, context);
 		// FileObjectData s3OjectData2 = getLocalFileObjectData(FILENAME,
 		// startPosition, chunkSize, context);
-		System.out.println("s3OjectData2.getContentLength()=" + s3OjectData2.getContentLength());
+		System.out.println(partIndexString + " s3OjectData2.getContentLength()=" + s3OjectData2.getContentLength());
 		// context.getLogger().log("contentLength: " +
 		// s3OjectData2.getContentLength());
 
@@ -155,51 +172,7 @@ public class PostcodeLocationStoreFilePartLambda {
 		return new FileObjectData(objectDataString.length(), objectDataString);
 	}
 
-	private class ObjectData {
-
-		private final int contentLength;
-
-		private final int nextStartPosition;
-
-		private final boolean createSNSMessageToProcessRemainingData;
-
-		private final String objectString;
-
-		public ObjectData(int contentLength, int nextStartPosition, boolean createSNSMessageToProcessRemainingData,
-				String objectString) {
-			super();
-			this.contentLength = contentLength;
-			this.nextStartPosition = nextStartPosition;
-			this.createSNSMessageToProcessRemainingData = createSNSMessageToProcessRemainingData;
-			this.objectString = objectString;
-		}
-
-		public int getContentLength() {
-			return contentLength;
-		}
-
-		public int getNextStartPosition() {
-			return nextStartPosition;
-		}
-
-		public boolean isCreateSNSMessageToProcessRemainingData() {
-			return createSNSMessageToProcessRemainingData;
-		}
-
-		public String getObjectString() {
-			return objectString;
-		}
-
-		@Override
-		public String toString() {
-			return "ObjectData [contentLength=" + contentLength + ", nextStartPosition=" + nextStartPosition
-					+ ", createSNSMessageToProcessRemainingData=" + createSNSMessageToProcessRemainingData
-					+ ", objectString=" + objectString + "]";
-		}
-
-	}
-
-	private class FileObjectData {
+	public class FileObjectData {
 
 		private final int contentLength;
 
@@ -283,7 +256,7 @@ public class PostcodeLocationStoreFilePartLambda {
 		postcodes.stream().forEach(System.out::println);
 	}
 
-	public void createSNSMessage(StoreFilePartRequest storeFilePartRequest, Context context) {
+	public void createSNSMessage(StoreFilePartRequest storeFilePartRequest, Context context, String partIndexString) {
 
 		ObjectMapper mapper = new ObjectMapper();
 		String storeFilePartRequestJSONString = null;
@@ -298,12 +271,69 @@ public class PostcodeLocationStoreFilePartLambda {
 
 		String topicArn = "arn:aws:sns:eu-west-1:656423721434:postcodeFileUploadNotifications";
 
-		context.getLogger().log("publish to - topicArn=" + topicArn);
-		context.getLogger()
-				.log("publish to - storeFilePartRequestJSONString=" + storeFilePartRequestJSONString.toString());
+		context.getLogger().log(partIndexString + " publish to - topicArn=" + topicArn);
+		context.getLogger().log(partIndexString + " publish to - storeFilePartRequestJSONString="
+				+ storeFilePartRequestJSONString.toString());
 		PublishRequest publishRequest = new PublishRequest(topicArn, storeFilePartRequestJSONString);
 		PublishResult publishResult = snsClient.publish(publishRequest);
 		// print MessageId of message published to SNS topic
-		context.getLogger().log("MessageId - " + publishResult.getMessageId());
+		context.getLogger().log(partIndexString + " MessageId - " + publishResult.getMessageId());
 	}
+
+	protected void storeDataInDynamoDB(ObjectData objectData) {
+		String[] lines = objectData.getObjectString().split("\n");
+
+		List<String> linesList = Arrays.asList(lines);
+		linesList.stream().filter(line -> !line.startsWith("Postcode")).sequential().skip(0).map(mapToNoAndPostcode)
+				.collect(Collectors.toList());
+	}
+
+	protected Function<String, PostcodeLocationModel> mapToNoAndPostcode = (line) -> {
+		// System.out.println(line);
+
+		line = line.replace("\r", "");
+		line = line.replace("\n", "");
+		String[] lineData = line.split(",(?=([^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+
+		// Postcode,Latitude,Longitude,Easting,Northing,GridRef,County,District,Ward,
+		// DistrictCode,WardCode,Country,CountyCode,Constituency,Introduced,Terminated,Parish,NationalPark,Population,Households,Built
+		// up area,Built up sub-division,Lower layer super output
+		// area,Rural/urban,Region
+
+		String postcode = lineData[0].replace("\"", "");
+		String latitude = lineData[1].replace("\"", "");
+		String longitude = lineData[2].replace("\"", "");
+		String easting = lineData[3].replace("\"", "");
+		String northing = lineData[4].replace("\"", "");
+		String gridRef = lineData[5].replace("\"", "");
+		String county = lineData[6].replace("\"", "");
+		String district = lineData[7].replace("\"", "");
+		String ward = lineData[8].replace("\"", "");
+		String districtCode = lineData[9].replace("\"", "");
+		String wardCode = lineData[10].replace("\"", "");
+		String country = lineData[11].replace("\"", "");
+		String countyCode = lineData[12].replace("\"", "");
+		String constituency = lineData[13].replace("\"", "");
+		String introduced = lineData[14].replace("\"", "");
+		String terminated = lineData[15].replace("\"", "");
+		String parish = lineData[16].replace("\"", "");
+		String nationalPark = lineData[17].replace("\"", "");
+		String population = lineData[18].replace("\"", "");
+		String households = lineData[19].replace("\"", "");
+		String builtUpArea = lineData[20].replace("\"", "");
+		String builtUpSubDivision = lineData[21].replace("\"", "");
+		String lowerLayerSuperOutputArea = lineData[22].replace("\"", "");
+		String ruralUrban = lineData[23].replace("\"", "");
+		String region = lineData[24].replace("\"", "");
+
+		PostcodeLocationModel postcodeLocationModel = new PostcodeLocationModel(postcode, latitude, longitude, easting,
+				northing, gridRef, county, district, ward, districtCode, wardCode, country, countyCode, constituency,
+				introduced, terminated, parish, nationalPark, population, households, builtUpArea, builtUpSubDivision,
+				lowerLayerSuperOutputArea, ruralUrban, region);
+
+		System.out.println(postcodeLocationModel.toString());
+
+		return postcodeLocationModel;
+	};
+
 }

@@ -8,15 +8,19 @@ public class StoreFilePartResponse {
 
 	private String finished;
 
+	private String partIndex;
+
 	public StoreFilePartResponse() {
 		super();
 	}
 
-	public StoreFilePartResponse(String status, String nextStartPosition, String finished) {
+	public StoreFilePartResponse(String status, String nextStartPosition, String finished, String partIndex) {
 		super();
 		this.status = status;
 		this.nextStartPosition = nextStartPosition;
 		this.finished = finished;
+		this.partIndex = partIndex;
+
 	}
 
 	public String getStatus() {
@@ -43,9 +47,17 @@ public class StoreFilePartResponse {
 		this.finished = finished;
 	}
 
+	public String getPartIndex() {
+		return partIndex;
+	}
+
+	public void setPartIndex(String partIndex) {
+		this.partIndex = partIndex;
+	}
+
 	@Override
 	public String toString() {
 		return "StoreFilePartResponse [status=" + status + ", nextStartPosition=" + nextStartPosition + ", finished="
-				+ finished + "]";
+				+ finished + ", partIndex=" + partIndex + "]";
 	}
 }

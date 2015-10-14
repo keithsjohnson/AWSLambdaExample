@@ -12,16 +12,20 @@ public class StoreFilePartRequest {
 
 	private String startPosition;
 
+	private String partIndex;
+
 	public StoreFilePartRequest() {
 	}
 
-	public StoreFilePartRequest(String bucket, String key, String chunkSize, String regionName, String startPosition) {
+	public StoreFilePartRequest(String bucket, String key, String chunkSize, String regionName, String startPosition,
+			String partIndex) {
 		super();
 		this.bucket = bucket;
 		this.key = key;
 		this.chunkSize = chunkSize;
 		this.regionName = regionName;
 		this.startPosition = startPosition;
+		this.partIndex = partIndex;
 	}
 
 	public String getBucket() {
@@ -64,10 +68,18 @@ public class StoreFilePartRequest {
 		this.startPosition = startPosition;
 	}
 
+	public String getPartIndex() {
+		return partIndex;
+	}
+
+	public void setPartIndex(String partIndex) {
+		this.partIndex = partIndex;
+	}
+
 	@Override
 	public String toString() {
 		return "StoreFilePartRequest [bucket=" + bucket + ", key=" + key + ", chunkSize=" + chunkSize + ", regionName="
-				+ regionName + ", startPosition=" + startPosition + "]";
+				+ regionName + ", startPosition=" + startPosition + ", partIndex=" + partIndex + "]";
 	}
 
 }
