@@ -57,3 +57,27 @@ task buildZip(type: Zip) {
 
 build.dependsOn buildZip
 
+task wrapper(type: Wrapper) {
+    gradleVersion = '2.9'
+}
+
+plugins.withType(JavaPlugin) {
+
+    eclipse {
+        classpath {
+            plusConfigurations += [
+                configurations.compile,
+                configurations.runtime,
+                configurations.testCompile,
+                configurations.testRuntime
+            ]
+        }
+    }
+}
+
+// We only want to create classpaths etc for java projects.
+plugins.withType(JavaBasePlugin) {
+
+   build.dependsOn eclipseClasspath
+   eclipseClasspath.dependsOn cleanEclipseClasspath
+}
